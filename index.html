@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commute Impact Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --surface2: #f0efe9;
+    --border: rgba(0,0,0,0.09);
+    --border-strong: rgba(0,0,0,0.15);
+    --text: #1a1a18;
+    --text-secondary: #6b6b65;
+    --text-hint: #9e9e98;
+    --green: #3B6D11;
+    --green-bg: #EAF3DE;
+    --red: #A32D2D;
+    --red-bg: #FCEBEB;
+    --blue: #185FA5;
+    --blue-bg: #E6F1FB;
+    --emp1: #185FA5;
+    --emp1-bg: #E6F1FB;
+    --emp2: #085041;
+    --emp2-bg: #E1F5EE;
+    --emp3: #633806;
+    --emp3-bg: #FAEEDA;
+    --cur-pin: #2C2C2A;
+    --opt-pin: #7B2E10;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .header {
+    margin-bottom: 1.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-title {
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+
+  .header-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+  }
+
+  .header-meta {
+    font-size: 12px;
+    color: var(--text-hint);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 1.25rem;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+  }
+
+  .metric-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+
+  .metric-value {
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+  }
+
+  .metric-sub {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 1rem;
+  }
+
+  #map {
+    width: 100%;
+    height: 380px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border);
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 0.9rem;
+    font-size: 12px;
+    color: var(--text-secondary);
+    align-items: center;
+  }
+
+  .leg-item { display: flex; align-items: center; gap: 6px; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .gmaps-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 5px 12px;
+    transition: background 0.15s;
+  }
+  .gmaps-link:hover { background: var(--surface2); }
+
+  .agg-row {
+    display: grid;
+    grid-template-columns: 210px 1fr 100px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .agg-row:last-child { border-bottom: none; }
+  .agg-label { font-size: 13px; }
+  .agg-label strong { font-weight: 500; }
+  .agg-sublabel { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+  .agg-delta { font-size: 13px; font-weight: 500; text-align: right; }
+
+  .bar-bg { height: 7px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  select {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+  }
+  select:focus { border-color: var(--blue); }
+
+  .emp-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .emp-row:last-child { border-bottom: none; }
+
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 500; flex-shrink: 0;
+  }
+  .av-1 { background: var(--emp1-bg); color: var(--emp1); }
+  .av-2 { background: var(--emp2-bg); color: var(--emp2); }
+  .av-3 { background: var(--emp3-bg); color: var(--emp3); }
+
+  .emp-info { min-width: 120px; flex-shrink: 0; }
+  .emp-name { font-size: 13px; font-weight: 500; }
+  .emp-sub { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+
+  .div-wrap { flex: 1; position: relative; height: 8px; }
+  .div-track { position: absolute; inset: 0; background: var(--surface2); border-radius: 4px; }
+  .div-zero { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--border-strong); transform: translateX(-50%); border-radius: 1px; }
+  .div-bar { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+
+  .delta-label { font-size: 13px; font-weight: 500; min-width: 92px; text-align: right; font-family: 'DM Mono', monospace; }
+  .pos { color: var(--red); }
+  .neg { color: var(--green); }
+  .neu { color: var(--text-hint); }
+
+  .axis-hint {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-hint);
+    font-family: 'DM Mono', monospace;
+    margin-top: 4px;
+    padding: 0 1px;
+  }
+
+  .chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: 'DM Mono', monospace;
+  }
+  .chip-g { background: var(--green-bg); color: var(--green); }
+  .chip-r { background: var(--red-bg); color: var(--red); }
+  .chip-n { background: var(--surface2); color: var(--text-secondary); }
+
+  table.mx { border-collapse: collapse; width: 100%; }
+  table.mx th {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border-bottom: 0.5px solid var(--border);
+    vertical-align: bottom;
+    text-align: center;
+  }
+  table.mx th:first-child { text-align: left; }
+  table.mx td {
+    padding: 10px 12px;
+    font-size: 13px;
+    text-align: center;
+    border-bottom: 0.5px solid var(--border);
+  }
+  table.mx tbody tr:last-child td { border-bottom: none; }
+  table.mx td:first-child { text-align: left; }
+  .th-stack { display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.35; }
+  .th-main { font-size: 12px; font-weight: 500; color: var(--text); }
+  .th-sub { font-size: 10px; font-weight: 400; color: var(--text-secondary); }
+
+  .ins-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .ins {
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    padding: 1rem 1.1rem;
+  }
+  .ins-icon { font-size: 16px; margin-bottom: 6px; color: var(--text-secondary); }
+  .ins-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .ins-body { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+
+  .leaflet-popup-content-wrapper {
+    border-radius: 8px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 13px !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12) !important;
+  }
+  .leaflet-popup-content { margin: 10px 14px !important; }
+  .popup-title { font-weight: 500; margin-bottom: 4px; }
+  .popup-detail { font-size: 12px; color: #666; line-height: 1.5; }
+
+  @media (max-width: 640px) {
+    .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    .ins-grid { grid-template-columns: 1fr; }
+    .agg-row { grid-template-columns: 150px 1fr 80px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div>
+      <div class="header-title">Commute impact dashboard</div>
+      <div class="header-sub">Tuesday 8am departure · driving with traffic</div>
+    </div>
+    <div class="header-meta">3 employees &middot; 5 relocation options</div>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric-card">
+      <div class="metric-label">Avg current commute</div>
+      <div class="metric-value" id="m-cur">—</div>
+      <div class="metric-sub">min per employee</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Best option</div>
+      <div class="metric-value" id="m-best">—</div>
+      <div class="metric-sub" id="m-best-sub">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Worst option</div>
+      <div class="metric-value" id="m-worst">—</div>
+      <div class="metric-sub" id="m-worst-sub">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Biggest individual swing</div>
+      <div class="metric-value" id="m-swing">—</div>
+      <div class="metric-sub" id="m-swing-sub">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Map</div>
+    <div class="legend">
+      <div class="leg-item"><div style="width:10px;height:10px;background:#185FA5;transform:rotate(45deg);border-radius:2px;flex-shrink:0;"></div>Employees</div>
+      <div class="leg-item"><div style="width:10px;height:10px;background:#3B6D11;border-radius:2px;flex-shrink:0;"></div>Current office</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#7B2E10;"></div>Relocation options</div>
+    </div>
+    <div id="map"></div>
+    <a id="gmaps-link" class="gmaps-link" href="#" target="_blank">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      Open in Google Maps
+    </a>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Aggregate workforce impact by location</div>
+    <div id="agg-list"></div>
+  </div>
+
+  <div class="card">
+    <div class="top-bar">
+      <div class="card-title" style="margin:0;">Per-employee breakdown</div>
+      <select id="loc-sel" onchange="renderEmp()"></select>
+    </div>
+    <div id="emp-list"></div>
+    <div id="axis-row" style="display:none;margin-top:4px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Commute matrix <span style="font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-hint);">(minutes one-way)</span></div>
+    <table class="mx" id="matrix"></table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Key insights</div>
+    <div class="ins-grid" id="insights"></div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const employees = [
+  { id: "emp1", name: "Employee 1", initials: "E1", av: "av-1", neighborhood: "Chaska" },
+  { id: "emp2", name: "Employee 2", initials: "E2", av: "av-2", neighborhood: "Arden Hills" },
+  { id: "emp3", name: "Employee 3", initials: "E3", av: "av-3", neighborhood: "Bloomington" },
+];
+
+const offices = [
+  { id: "current", label: "Current office", line1: "708 N 1st St", line2: "Minneapolis", area: "708 N 1st St, Minneapolis", current: true },
+  { id: "loc1", label: "Option A", line1: "10000 Hwy 55", line2: "Plymouth", area: "10000 Hwy 55, Plymouth" },
+  { id: "loc2", label: "Option B", line1: "2950 Xenium Ln N", line2: "Plymouth", area: "2950 Xenium Ln N, Plymouth" },
+  { id: "loc3", label: "Option C", line1: "900 N 3rd St", line2: "Minneapolis", area: "900 N 3rd St, Minneapolis" },
+  { id: "loc4", label: "Option D", line1: "10250 Valley View Rd", line2: "Eden Prairie", area: "10250 Valley View Rd, Eden Prairie" },
+  { id: "loc5", label: "Option E", line1: "615 1st Ave NE", line2: "Minneapolis", area: "615 1st Ave NE, Minneapolis" },
+];
+
+const commutes = {
+  emp1: { current: 47, loc1: 29, loc2: 29, loc3: 47, loc4: 20, loc5: 47 },
+  emp2: { current: 25, loc1: 34, loc2: 34, loc3: 27, loc4: 41, loc5: 20 },
+  emp3: { current: 27, loc1: 19, loc2: 21, loc3: 27, loc4: 11, loc5: 26 },
+};
+
+const coords = {
+  emp1: { lat: 44.797315, lng: -93.621739 },
+  emp2: { lat: 45.043081, lng: -93.155278 },
+  emp3: { lat: 44.854965, lng: -93.326822 },
+  current: { lat: 44.989985, lng: -93.274896 },
+  loc1: { lat: 44.984616, lng: -93.406394 },
+  loc2: { lat: 45.013464, lng: -93.448925 },
+  loc3: { lat: 44.989064, lng: -93.280904 },
+  loc4: { lat: 44.872485, lng: -93.406757 },
+  loc5: { lat: 44.991064, lng: -93.252665 },
+};
+
+const nc = offices.filter(o => !o.current);
+const MAX_D = Math.max(...nc.flatMap(o => employees.map(e => Math.abs(commutes[e.id][o.id] - commutes[e.id].current))));
+
+function aggDelta(id) { return employees.reduce((s, e) => s + (commutes[e.id][id] - commutes[e.id].current), 0); }
+function dcol(d) { return d > 0 ? "#E24B4A" : d < 0 ? "#639922" : "#888780"; }
+function dcls(d) { return d > 0 ? "pos" : d < 0 ? "neg" : "neu"; }
+function fmtD(d) { if (d === 0) return "—"; return (d > 0 ? "+" : "") + d + " min"; }
+function fmtDA(d) { if (d === 0) return "no change"; return (d > 0 ? "+" : "") + d + " min total"; }
+
+function renderMetrics() {
+  const avg = Math.round(employees.reduce((s, e) => s + commutes[e.id].current, 0) / employees.length);
+  document.getElementById("m-cur").textContent = avg + " min";
+  const ds = nc.map(o => ({ o, d: aggDelta(o.id) }));
+  const best = ds.reduce((a, b) => a.d < b.d ? a : b);
+  const worst = ds.reduce((a, b) => a.d > b.d ? a : b);
+  document.getElementById("m-best").textContent = best.o.label;
+  document.getElementById("m-best-sub").textContent = fmtDA(best.d);
+  document.getElementById("m-worst").textContent = worst.o.label;
+  document.getElementById("m-worst-sub").textContent = fmtDA(worst.d);
+  let maxAbs = 0, maxEmp = null, maxLoc = null;
+  nc.forEach(loc => employees.forEach(emp => {
+    const d = Math.abs(commutes[emp.id][loc.id] - commutes[emp.id].current);
+    if (d > maxAbs) { maxAbs = d; maxEmp = emp; maxLoc = loc; }
+  }));
+  const raw = commutes[maxEmp.id][maxLoc.id] - commutes[maxEmp.id].current;
+  document.getElementById("m-swing").textContent = (raw > 0 ? "+" : "") + raw + " min";
+  document.getElementById("m-swing-sub").textContent = maxEmp.name + " @ " + maxLoc.label;
+}
+
+function renderAgg() {
+  const MAX_AGG = Math.max(...nc.map(o => Math.abs(aggDelta(o.id))));
+  const rows = nc.map(o => {
+    const d = aggDelta(o.id);
+    const pct = MAX_AGG === 0 ? 0 : Math.round(Math.abs(d) / MAX_AGG * 50);
+    const z = 50;
+    let bar = '';
+    if (d === 0) {
+      bar = `<div class="div-wrap"><div class="div-track"></div><div class="div-zero" style="left:${z}%;"></div></div>`;
+    } else if (d < 0) {
+      bar = `<div class="div-wrap"><div class="div-track"></div><div class="div-bar" style="left:${z - pct}%;width:${pct}%;background:#639922;"></div><div class="div-zero" style="left:${z}%;"></div></div>`;
+    } else {
+      bar = `<div class="div-wrap"><div class="div-track"></div><div class="div-bar" style="left:${z}%;width:${pct}%;background:#E24B4A;"></div><div class="div-zero" style="left:${z}%;"></div></div>`;
+    }
+    return `<div class="emp-row" style="gap:12px;">
+      <div class="emp-info" style="min-width:160px;"><div class="emp-name">${o.label}</div><div class="emp-sub">${o.area}</div></div>
+      ${bar}
+      <div class="delta-label ${dcls(d)}">${fmtDA(d)}</div>
+    </div>`;
+  }).join("");
+  const axis = `<div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
+    <div style="min-width:160px;flex-shrink:0;"></div>
+    <div style="flex:1;"><div class="axis-hint"><span>+${MAX_AGG} min</span><span>0</span><span>−${MAX_AGG} min</span></div></div>
+    <div style="min-width:80px;"></div>
+  </div>`;
+  document.getElementById("agg-list").innerHTML = rows + axis;
+}
+
+function renderSelect() {
+  document.getElementById("loc-sel").innerHTML = offices.map(o =>
+    `<option value="${o.id}">${o.label}${o.current ? " (current)" : ""} — ${o.area}</option>`
+  ).join("");
+}
+
+function makeDivBar(d) {
+  const pct = MAX_D === 0 ? 0 : Math.round(Math.abs(d) / MAX_D * 50);
+  const z = 50;
+  if (d === 0) return `<div class="div-wrap"><div class="div-track"></div><div class="div-zero" style="left:${z}%;"></div></div>`;
+  if (d < 0) return `<div class="div-wrap"><div class="div-track"></div><div class="div-bar" style="left:${z - pct}%;width:${pct}%;background:#639922;"></div><div class="div-zero" style="left:${z}%;"></div></div>`;
+  return `<div class="div-wrap"><div class="div-track"></div><div class="div-bar" style="left:${z}%;width:${pct}%;background:#E24B4A;"></div><div class="div-zero" style="left:${z}%;"></div></div>`;
+}
+
+function renderEmp() {
+  const locId = document.getElementById("loc-sel").value;
+  const axisRow = document.getElementById("axis-row");
+  if (locId === "current") {
+    axisRow.style.display = "none";
+    const maxM = Math.max(...employees.map(e => commutes[e.id].current));
+    document.getElementById("emp-list").innerHTML = employees.map(emp => {
+      const m = commutes[emp.id].current;
+      const w = Math.round(m / maxM * 100);
+      return `<div class="emp-row">
+        <div class="avatar ${emp.av}">${emp.initials}</div>
+        <div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-sub">${emp.neighborhood}</div></div>
+        <div style="flex:1;"><div class="bar-bg"><div class="bar-fill" style="width:${w}%;background:#378ADD;"></div></div></div>
+        <div class="delta-label" style="color:var(--text);">${m} min</div>
+      </div>`;
+    }).join(""); return;
+  }
+  axisRow.style.display = "block";
+  axisRow.innerHTML = `<div style="display:flex;align-items:center;gap:12px;">
+    <div style="width:32px;flex-shrink:0;"></div>
+    <div style="min-width:120px;flex-shrink:0;"></div>
+    <div style="flex:1;"><div class="axis-hint"><span>+${MAX_D} min</span><span>0</span><span>−${MAX_D} min</span></div></div>
+    <div style="min-width:62px;"></div>
+  </div>`;
+  document.getElementById("emp-list").innerHTML = employees.map(emp => {
+    const cur = commutes[emp.id].current, nw = commutes[emp.id][locId], d = nw - cur;
+    return `<div class="emp-row">
+      <div class="avatar ${emp.av}">${emp.initials}</div>
+      <div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-sub">${cur} → ${nw} min</div></div>
+      ${makeDivBar(d)}
+      <div class="delta-label ${dcls(d)}">${fmtD(d)}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderMatrix() {
+  let h = `<thead><tr><th></th>`;
+  offices.forEach(o => {
+    h += `<th><div class="th-stack">
+      <span class="th-main">${o.label}${o.current ? " ★" : ""}</span>
+      <span class="th-sub">${o.line1}</span>
+      <span class="th-sub">${o.line2}</span>
+    </div></th>`;
+  });
+  h += `</tr></thead><tbody>`;
+  employees.forEach(emp => {
+    h += `<tr><td><div style="display:flex;align-items:center;gap:8px;">
+      <div class="avatar ${emp.av}" style="width:26px;height:26px;font-size:10px;flex-shrink:0;">${emp.initials}</div>
+      <span>${emp.name}</span></div></td>`;
+    offices.forEach(o => {
+      const m = commutes[emp.id][o.id], d = m - commutes[emp.id].current;
+      h += `<td>`;
+      if (o.current) { h += `<strong>${m} min</strong>`; }
+      else {
+        const cls = d > 0 ? "chip-r" : d < 0 ? "chip-g" : "chip-n";
+        h += `<div style="font-weight:500;margin-bottom:3px;">${m} min</div><span class="chip ${cls}">${d > 0 ? "+" : ""}${d} min</span>`;
+      }
+      h += `</td>`;
+    });
+    h += `</tr>`;
+  });
+  h += `</tbody>`;
+  document.getElementById("matrix").innerHTML = h;
+}
+
+function renderInsights() {
+  const ds = nc.map(o => ({ o, d: aggDelta(o.id) }));
+  const best = ds.reduce((a, b) => a.d < b.d ? a : b);
+  const mostSens = employees.map(emp => {
+    const range = Math.max(...nc.map(o => commutes[emp.id][o.id])) - Math.min(...nc.map(o => commutes[emp.id][o.id]));
+    return { emp, range };
+  }).reduce((a, b) => a.range > b.range ? a : b);
+  const wins = nc.filter(o => employees.every(e => commutes[e.id][o.id] <= commutes[e.id].current));
+  const allWorse = nc.filter(o => employees.every(e => commutes[e.id][o.id] >= commutes[e.id].current));
+  const cards = [
+    { icon: "★", title: "Best option for the team", body: `<strong>${best.o.label}</strong> (${best.o.area}) delivers the biggest combined improvement: <strong>${fmtDA(best.d)}</strong> across all three employees.` },
+    { icon: "◎", title: "Most location-sensitive employee", body: `${mostSens.emp.name} sees up to <strong>${mostSens.range} min</strong> of variance across options — their commute is most affected by where you land.` },
+    { icon: wins.length > 0 ? "✓" : "△", title: wins.length > 0 ? "Universal wins" : "No universal wins", body: wins.length > 0 ? `${wins.map(o => o.label).join(", ")} reduce commutes for every employee — no one is left worse off.` : `No single option improves commutes for all three employees. Every move involves at least one tradeoff.` },
+    { icon: "⊘", title: allWorse.length > 0 ? "Universally worse" : "No option is uniformly bad", body: allWorse.length > 0 ? `${allWorse.map(o => o.label).join(", ")} increase commutes for every employee.` : `Every option benefits at least one employee — no location is a clear loser for everyone.` },
+  ];
+  document.getElementById("insights").innerHTML = cards.map(c => `
+    <div class="ins">
+      <div class="ins-icon">${c.icon}</div>
+      <div class="ins-title">${c.title}</div>
+      <div class="ins-body">${c.body}</div>
+    </div>`).join("");
+}
+
+function initMap() {
+  const map = L.map("map").setView([44.93, -93.37], 10);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+  }).addTo(map);
+
+  function makeEmpIcon() {
+    const s = 16;
+    return L.divIcon({
+      html: `<div style="width:${s}px;height:${s}px;background:#185FA5;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);transform:rotate(45deg);border-radius:2px;"></div>`,
+      className: "",
+      iconSize: [s, s],
+      iconAnchor: [s / 2, s / 2],
+      popupAnchor: [0, -s / 2 - 6]
+    });
+  }
+
+  function makeCurOfficeIcon() {
+    const s = 16;
+    return L.divIcon({
+      html: `<div style="width:${s}px;height:${s}px;background:#3B6D11;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.25);border-radius:3px;"></div>`,
+      className: "",
+      iconSize: [s, s],
+      iconAnchor: [s / 2, s / 2],
+      popupAnchor: [0, -s / 2 - 4]
+    });
+  }
+
+  function makeOfficeIcon(color) {
+    const s = 16;
+    return L.divIcon({
+      html: `<div style="width:${s}px;height:${s}px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>`,
+      className: "",
+      iconSize: [s, s],
+      iconAnchor: [s / 2, s / 2],
+      popupAnchor: [0, -s / 2 - 4]
+    });
+  }
+
+  employees.forEach(emp => {
+    const c = coords[emp.id];
+    L.marker([c.lat, c.lng], { icon: makeEmpIcon() })
+      .addTo(map)
+      .bindPopup(`<div class="popup-title">${emp.name}</div><div class="popup-detail">${emp.neighborhood}<br>Current commute: <strong>${commutes[emp.id].current} min</strong></div>`);
+  });
+
+  const cc = coords.current;
+  L.marker([cc.lat, cc.lng], { icon: makeCurOfficeIcon() })
+    .addTo(map)
+    .bindPopup(`<div class="popup-title">Current office</div><div class="popup-detail">708 N 1st St, Minneapolis</div>`);
+
+  offices.filter(o => !o.current).forEach(o => {
+    const c = coords[o.id];
+    const d = aggDelta(o.id);
+    L.marker([c.lat, c.lng], { icon: makeOfficeIcon("#7B2E10") })
+      .addTo(map)
+      .bindPopup(`<div class="popup-title">${o.label}</div><div class="popup-detail">${o.area}<br>Workforce impact: <strong>${fmtDA(d)}</strong></div>`);
+  });
+
+  const allAddrs = [
+    "5007+Boulder+Ln,Chaska,MN", "1302+Cannon+Ave,Arden+Hills,MN", "3617+Towndale+Dr,Bloomington,MN",
+    "708+N+1st+St,Minneapolis,MN", "10000+Hwy+55,Plymouth,MN", "2950+Xenium+Ln+N,Plymouth,MN",
+    "900+N+3rd+St,Minneapolis,MN", "10250+Valley+View+Rd,Eden+Prairie,MN", "615+1st+Ave+NE,Minneapolis,MN"
+  ].join("/");
+  document.getElementById("gmaps-link").href = `https://www.google.com/maps/dir/${allAddrs}`;
+}
+
+renderMetrics();
+renderAgg();
+renderSelect();
+renderEmp();
+renderMatrix();
+renderInsights();
+initMap();
+</script>
+</body>
+</html>
